@@ -61,7 +61,7 @@ def load_graph(file_path):
     return graph, averaged_stops
 
 
-def dijkstra(graph, start, end, start_time):
+def dijkstra(graph, start, end, start_time, add_astar_coeff):
     queue = [(0, start, start_time, None, [])]
     visited = {}
     end_min_cost = float('inf')
@@ -95,16 +95,14 @@ def dijkstra(graph, start, end, start_time):
     return end_min_cost, end_path
 
 
-def find_shortest_path(file_path, start, end, criterion, start_time):
-    graph, stops = load_graph(file_path)
+def find_shortest_path(start, end, criterion, start_time, graph, stops):
     start_time = parse_time(start_time)
     start_time_measure = time.time()
     if criterion == 't':
-        cost, path = dijkstra(graph, start, end, start_time)
+        cost, path = dijkstra(graph, start, end, start_time, False)
 
         for i in range(0, len(path)):
             print(path[i])
-        print(format_duration(cost) + "\n\n")
 
     else:
         raise NotImplementedError("A* for transfers is not yet implemented")
@@ -112,20 +110,23 @@ def find_shortest_path(file_path, start, end, criterion, start_time):
 
     if path:
 
-        print("Route:")
+        start_line, start_stop, s_time = "", "", 0
+        print(f"{start_time} {start} -> {end}:")
         for i in range(1, len(path)):
             prev_line, prev_stop, prev_time = path[i - 1]
             line, stop, time_point = path[i]
-            start_line, start_stop, start_time = "", "", 0
 
             if line != prev_line:
-                print(f"Linia {line}: {prev_stop} ({prev_time}) -> ")
+                if prev_line != "START":
+                    print(f"Line {start_line}: {start_stop} ({s_time}) -> {prev_stop} ({prev_time})")
                 start_line = line
-                start_stop = stop
-                start_time = time
-                # print(f"Linia {line}: {prev_stop} ({prev_time}) -> {stop} ({time_point})")
+                start_stop = prev_stop
+                s_time = prev_time
 
-        print(f"\nTime en route: {format_duration(cost)}")
+        prev_line, prev_stop, prev_time = path[-1]
+        print(f"Line {start_line}: {start_stop} ({s_time}) -> {prev_stop} ({prev_time})")
+
+        print(f"\nTime en route: {format_duration(cost)}\n\n")
 
     else:
         print("Route not found")
@@ -133,6 +134,6 @@ def find_shortest_path(file_path, start, end, criterion, start_time):
     print(f"\nExecution time: {end_time_measure - start_time_measure:.4f} s", file=sys.stderr)
 
 if __name__ == "__main__":
-    find_shortest_path("Datasource/data.csv",
-                       "Wyszyńskiego", "PAWŁOWICE (Widawska)",
-                       "t", "20:50:00")
+    graph, stops = load_graph("Datasource/data.csv")
+    find_shortest_path( "Pola", "Broniweskiego",
+                       "t", "19:10:00", graph, stops)
