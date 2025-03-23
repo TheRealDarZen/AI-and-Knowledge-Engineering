@@ -122,20 +122,65 @@ def dijkstra(graph, start, end, start_time, add_astar_coeff):
     return end_min_travel_time, end_path
 
 
+def dijkstra_min_transfers(graph, start, end, start_time):
+    queue = [(0, start, start_time, None, [], 0)]
+    visited = {}
+    end_min_transfers = float('inf')
+    end_path = ()
+    end_min_travel_time = float('inf')
+
+    while queue:
+        transfers, node, current_time, current_line, path, actual_travel_time = heapq.heappop(queue)
+
+        if node in visited and visited[node] <= (transfers, current_time):
+            continue
+
+        if transfers > end_min_transfers:
+            continue
+
+        path = path + [(current_line if current_line else "START", node, current_time)]
+
+        if node == end:
+            if (transfers < end_min_transfers or
+                    (transfers == end_min_transfers and actual_travel_time < end_min_travel_time)):
+                end_min_transfers = transfers
+                end_path = path
+                end_min_travel_time = actual_travel_time
+            continue
+
+        visited[node] = (transfers, current_time)
+
+        for neighbor, line, dep_time, arr_time, travel_time in graph.get(node, []):
+            if dep_time >= current_time:
+                wait_time = (dep_time - current_time).seconds
+                real_travel_time = actual_travel_time + travel_time + wait_time
+
+                new_transfers = transfers + (1 if line != current_line and current_line is not None else 0)
+
+                heapq.heappush(queue, (new_transfers, neighbor, arr_time, line, path, real_travel_time))
+
+    return end_min_transfers, end_path
+
+
 def find_shortest_path(start, end, criterion, start_time, graph, stops):
     start_time = parse_time(start_time)
     start_time_measure = time.time()
+    travel_time = -1
+    transfer_count = -1
     if criterion == 't':
         travel_time, path = dijkstra(graph, start, end, start_time, True)
 
-        for i in range(0, len(path)):
-            print(path[i])
+    elif criterion == 'p':
+        transfer_count, path = dijkstra_min_transfers(graph, start, end, start_time)
 
     else:
         raise NotImplementedError("A* for transfers is not yet implemented")
     end_time_measure = time.time()
 
     if path:
+
+        for i in range(0, len(path)):
+            print(path[i])
 
         start_line, start_stop, s_time = "", "", 0
         print(f"{start_time} {start} -> {end}:")
@@ -154,7 +199,10 @@ def find_shortest_path(start, end, criterion, start_time, graph, stops):
         prev_line, prev_stop, prev_time = path[-1]
         print(f"Line {start_line}: {start_stop} ({s_time}) -> {prev_stop} ({prev_time})")
 
-        print(f"\nTime en route: {format_duration(travel_time)}\n\n")
+        if travel_time > -1:
+            print(f"\nTime en route: {format_duration(travel_time)}\n\n")
+        else:
+            print(f"Transfers: {transfer_count}")
 
     else:
         print("Route not found")
@@ -165,3 +213,4 @@ if __name__ == "__main__":
     graph, stops = load_graph("Datasource/data.csv")
     # find_shortest_path( "Pola", "Broniewskiego", "t", "02:12:00", graph, stops)
     find_shortest_path("KRZYKI", "OSIEDLE SOBIESKIEGO", "t", "05:12:00", graph, stops)
+    find_shortest_path("Kowale (Stacja kolejowa)", "Daszyńskiego", "p", "13:48:00", graph, stops)
