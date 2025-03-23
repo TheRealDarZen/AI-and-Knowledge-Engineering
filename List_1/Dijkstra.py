@@ -113,7 +113,7 @@ def dijkstra(graph, start, end, start_time, add_astar_coeff):
                 if add_astar_coeff:
                     lat1, lon1 = stops[neighbor]
                     lat2, lon2 = stops[end]
-                    heuristic = haversine(lat1, lon1, lat2, lon2) * 180  # 1 km = 180 s
+                    heuristic = haversine(lat1, lon1, lat2, lon2) * 120  # 1 km = 120 s
 
                 heapq.heappush(queue, (real_travel_time + heuristic, neighbor,
                                        arr_time, line, path, real_travel_time))
