@@ -4,6 +4,7 @@ import sys
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta
+import math
 
 
 def parse_time(time_str):
@@ -61,14 +62,28 @@ def load_graph(file_path):
     return graph, averaged_stops
 
 
+def haversine(lat1, lon1, lat2, lon2):
+    R = 6371
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+
+    a = (math.sin(delta_phi / 2.0) ** 2 + math.cos(phi1) * math.cos(phi2)
+         * math.sin(delta_lambda / 2.0) ** 2)
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+    return R * c
+
+
 def dijkstra(graph, start, end, start_time, add_astar_coeff):
-    queue = [(0, start, start_time, None, [])]
+    queue = [(0, start, start_time, None, [], 0)]
     visited = {}
     end_min_cost = float('inf')
     end_path = ()
+    end_min_travel_time = float('inf')
 
     while queue:
-        cost, node, current_time, current_line, path = heapq.heappop(queue)
+        cost, node, current_time, current_line, path, actual_travel_time = heapq.heappop(queue)
 
         if node in visited and visited[node] <= current_time:
             continue
@@ -78,9 +93,13 @@ def dijkstra(graph, start, end, start_time, add_astar_coeff):
 
         path = path + [(current_line if current_line else "START", node, current_time)]
 
+        #print(f"Actual: {actual_travel_time}, Cost: {cost}")
+
         if node == end:
-            end_min_cost = cost
-            end_path = path
+            if actual_travel_time < end_min_travel_time:
+                end_min_travel_time = actual_travel_time
+                end_path = path
+                end_min_cost = cost
             continue
 
         visited[node] = current_time
@@ -88,18 +107,26 @@ def dijkstra(graph, start, end, start_time, add_astar_coeff):
         for neighbor, line, dep_time, arr_time, travel_time in graph.get(node, []):
             if dep_time >= current_time:
                 wait_time = (dep_time - current_time).seconds
-                total_travel_time = cost + travel_time + wait_time
+                real_travel_time = actual_travel_time + travel_time + wait_time
 
-                heapq.heappush(queue, (total_travel_time, neighbor, arr_time, line, path))
+                heuristic = 0
+                if add_astar_coeff:
+                    lat1, lon1 = stops[neighbor]
+                    lat2, lon2 = stops[end]
+                    heuristic = haversine(lat1, lon1, lat2, lon2) * 180  # 1 km = 180 s
 
-    return end_min_cost, end_path
+                heapq.heappush(queue, (real_travel_time + heuristic, neighbor,
+                                       arr_time, line, path, real_travel_time))
+
+    #print(f"Final Actual: {end_min_travel_time}, Final Cost: {end_min_cost}")
+    return end_min_travel_time, end_path
 
 
 def find_shortest_path(start, end, criterion, start_time, graph, stops):
     start_time = parse_time(start_time)
     start_time_measure = time.time()
     if criterion == 't':
-        cost, path = dijkstra(graph, start, end, start_time, False)
+        travel_time, path = dijkstra(graph, start, end, start_time, True)
 
         for i in range(0, len(path)):
             print(path[i])
@@ -118,7 +145,8 @@ def find_shortest_path(start, end, criterion, start_time, graph, stops):
 
             if line != prev_line:
                 if prev_line != "START":
-                    print(f"Line {start_line}: {start_stop} ({s_time}) -> {prev_stop} ({prev_time})")
+                    print(f"Line {start_line}: {start_stop} ({s_time}) -> "
+                          f"{prev_stop} ({prev_time})")
                 start_line = line
                 start_stop = prev_stop
                 s_time = prev_time
@@ -126,7 +154,7 @@ def find_shortest_path(start, end, criterion, start_time, graph, stops):
         prev_line, prev_stop, prev_time = path[-1]
         print(f"Line {start_line}: {start_stop} ({s_time}) -> {prev_stop} ({prev_time})")
 
-        print(f"\nTime en route: {format_duration(cost)}\n\n")
+        print(f"\nTime en route: {format_duration(travel_time)}\n\n")
 
     else:
         print("Route not found")
@@ -135,5 +163,5 @@ def find_shortest_path(start, end, criterion, start_time, graph, stops):
 
 if __name__ == "__main__":
     graph, stops = load_graph("Datasource/data.csv")
-    find_shortest_path( "Pola", "Broniweskiego",
-                       "t", "19:10:00", graph, stops)
+    # find_shortest_path( "Pola", "Broniewskiego", "t", "02:12:00", graph, stops)
+    find_shortest_path("KRZYKI", "OSIEDLE SOBIESKIEGO", "t", "05:12:00", graph, stops)
