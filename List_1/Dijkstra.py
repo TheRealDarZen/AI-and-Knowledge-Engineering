@@ -180,13 +180,13 @@ def find_shortest_path(start, end, criterion, start_time, graph, stops):
         transfer_count, path = dijkstra_min_transfers(graph, start, end, start_time, True)
 
     else:
-        raise NotImplementedError("Incorrect criterion. Please choose 't' or 'p'.")
+        raise NotImplementedError(f"Incorrect criterion. Please choose 't' or 'p'.")
     end_time_measure = time.time()
 
     if path:
 
-        for i in range(0, len(path)):
-            print(path[i])
+        # for i in range(0, len(path)):
+        #     print(path[i])
 
         start_line, start_stop, s_time = "", "", 0
         print(f"{start_time} {start} -> {end}:")
@@ -216,8 +216,18 @@ def find_shortest_path(start, end, criterion, start_time, graph, stops):
     print(f"\nExecution time: {end_time_measure - start_time_measure:.4f} s", file=sys.stderr)
 
 if __name__ == "__main__":
+    print("Please start inputting data:")
+
+    start = sys.stdin.readline().strip()
+    end = sys.stdin.readline().strip()
+    criterion = sys.stdin.readline().strip()
+    start_time = sys.stdin.readline().strip()
+
+    print("Waiting for program to finish running...")
+
     graph, stops = load_graph("Datasource/data.csv")
-    # find_shortest_path( "Pola", "Broniewskiego", "t", "02:12:00", graph, stops)
+
+    # find_shortest_path("Pola", "Broniewskiego", "t", "02:12:00", graph, stops)
     # find_shortest_path("KRZYKI", "OSIEDLE SOBIESKIEGO", "p", "05:12:00", graph, stops)
     # find_shortest_path("Kowale (Stacja kolejowa)", "Daszyńskiego", "p", "13:48:00", graph, stops)
-    find_shortest_path("Zajezdnia Obornicka", "PORT LOTNICZY", "p", "20:50:00", graph, stops)
+    find_shortest_path(start, end, criterion, start_time, graph, stops)

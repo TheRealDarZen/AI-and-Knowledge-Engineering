@@ -167,34 +167,12 @@ def dijkstra_min_transfers(graph, start, end, start_time, add_astar_coeff):
     return end_min_transfers, end_path
 
 
-def choose_dijkstra(graph, start, end, start_time, criterion):
-    if criterion == 't':
-        travel_time, path = dijkstra(graph, start, end, start_time, True)
-
-    elif criterion == 'p':
-        travel_time, path = dijkstra_min_transfers(graph, start, end, start_time, True)
-
-    else:
-        raise NotImplementedError("Incorrect criterion. Please choose 't' or 'p'.")
-
-    return travel_time, path
-
-
-def compute_distance_matrix(graph, stops, locations, start_time, criterion):
-    distance_matrix = {}
-    for i in locations:
-        distance_matrix[i] = {}
-        for j in locations:
-            if i != j:
-                distance_matrix[i][j], _ = choose_dijkstra(graph, i, j, start_time, criterion)
-    return distance_matrix
-
-
-def local_search(graph, stops, locations, start_time, distance_matrix, max_iterations=100):
+def local_search(graph, stops, locations, start_time, max_iterations=20):
 
     best_route = locations[:]
     random.shuffle(best_route[1:-1])
-    best_cost = calculate_route_cost(graph, best_route, start_time, distance_matrix, criterion)
+    best_cost, timings, path = calculate_route_cost(graph, best_route, start_time, criterion)
+    best_timings = timings
 
     for _ in range(max_iterations):
         improved = False
@@ -202,19 +180,20 @@ def local_search(graph, stops, locations, start_time, distance_matrix, max_itera
             for j in range(i + 1, len(best_route) - 1):
                 new_route = best_route[:]
                 new_route[i], new_route[j] = new_route[j], new_route[i]
-                new_cost = calculate_route_cost(graph, new_route, start_time, distance_matrix, criterion)
+                new_cost, timings, path = calculate_route_cost(graph, new_route, start_time, criterion)
 
                 if new_cost < best_cost:
                     best_cost = new_cost
                     best_route = new_route
+                    best_timings = timings
                     improved = True
         if not improved:
             break
 
-    return best_route, best_cost
+    return best_route, best_cost, best_timings
 
 
-def tabu_search(graph, stops, locations, start_time, distance_matrix, max_iterations=100, tabu_size=10, stagnation_limit=10):
+def tabu_search(graph, stops, locations, start_time, max_iterations=5, tabu_size=300):
 
     best_route = locations[:]
 
@@ -222,31 +201,44 @@ def tabu_search(graph, stops, locations, start_time, distance_matrix, max_iterat
         best_route.append(best_route[0])
 
     random.shuffle(best_route[1:-1])
-    best_cost = calculate_route_cost(graph, best_route, start_time, distance_matrix, criterion)
+    best_cost, timings, path = calculate_route_cost(graph, best_route, start_time, criterion)
 
     tabu_list = []
     best_solution = best_route[:]
     best_solution_cost = best_cost
-    stagnation_counter = 0
+    best_timings = timings
+    best_path = path
 
     for iteration in range(max_iterations):
         best_candidate = None
         best_candidate_cost = float('inf')
+        best_candidate_timings = []
+        best_candidate_path = [()]
 
         for i in range(1, len(best_route) - 2):
             for j in range(i + 1, len(best_route) - 1):
                 candidate = best_route[:]
+                move = (candidate[j], candidate[i])
+
+                if move in tabu_list:
+                    continue
+
                 candidate[i], candidate[j] = candidate[j], candidate[i]
-                candidate_cost = calculate_route_cost(graph, candidate, start_time, distance_matrix, criterion)
+                candidate_cost, candidate_timings, candidate_path = calculate_route_cost(graph, candidate, start_time, criterion)
 
-                move = (candidate[i], candidate[j])
-
-                if move in tabu_list and candidate_cost >= best_solution_cost:
+                if candidate_cost >= best_solution_cost:
                     continue
 
                 if candidate_cost < best_candidate_cost:
                     best_candidate = candidate
                     best_candidate_cost = candidate_cost
+                    best_candidate_timings = candidate_timings
+                    best_candidate_path = candidate_path
+
+                move = (best_candidate[i], best_candidate[j])
+                tabu_list.append(move)
+                if len(tabu_list) > tabu_size:
+                    tabu_list.pop(0)
 
         if best_candidate:
             best_route = best_candidate
@@ -254,70 +246,87 @@ def tabu_search(graph, stops, locations, start_time, distance_matrix, max_iterat
             if best_cost < best_solution_cost:
                 best_solution = best_route[:]
                 best_solution_cost = best_cost
-                stagnation_counter = 0
-            else:
-                stagnation_counter += 1
+                best_timings = best_candidate_timings
+                best_path = best_candidate_path
 
-            move = (best_candidate[i], best_candidate[j])
-            tabu_list.append(move)
-            if len(tabu_list) > tabu_size:
-                tabu_list.pop(0)
-
-        else:
-            stagnation_counter += 1
-
-        if stagnation_counter >= stagnation_limit:
-            print("Tabu Search: Terminated because of stagnation.")
-            break
-
-    return best_solution, best_solution_cost
+    return best_solution, best_solution_cost, best_timings, best_path
 
 
-def calculate_route_cost(graph, route, start_time, distance_matrix, criterion):
+def calculate_route_cost(graph, route, start_time, criterion):
     # print("Location_index_map:", location_index_map)
     # print("Route:", route)
 
     total_cost = 0
+    timings = []
     current_time = start_time
-    for i in range(len(route) - 1):
+    timings.append(current_time)
+    path = []
 
-        # travel_time = distance_matrix[route[i]][route[i+1]]
-        travel_time, _ = choose_dijkstra(graph, route[i], route[i+1], current_time, criterion)
+    if criterion == 't':
+        for i in range(len(route) - 1):
+            # travel_time = distance_matrix[route[i]][route[i+1]]
+            travel_time, path_part = dijkstra(graph, route[i], route[i + 1], current_time, True)
 
-        total_cost += travel_time
-        current_time += timedelta(seconds=travel_time)
-    return total_cost
+            total_cost += travel_time
+            current_time = path_part[-1][2]
+            timings.append(current_time)
+            path = path + path_part
+
+    elif criterion == 'p':
+        for i in range(len(route) - 1):
+            transfer_count, path_part = dijkstra_min_transfers(graph, route[i], route[i + 1], current_time, True)
+
+            total_cost += int(transfer_count)
+            current_time = path_part[-1][2]
+            timings.append(current_time)
+            path = path + path_part
+
+    else:
+        raise NotImplementedError(f"Incorrect criterion. Please choose 't' or 'p'.")
+
+    return total_cost, timings, path
 
 
 if __name__ == "__main__":
+    print("Please start inputting data:")
+
+    start = sys.stdin.readline().strip()
+    locations = sys.stdin.readline().strip().split(";")
+    start_time = sys.stdin.readline().strip()
+    criterion = sys.stdin.readline().strip()
+
+    print("Waiting for program to finish running...")
+
     graph, stops = load_graph("Datasource/data.csv")
-    locations = "OSIEDLE SOBIESKIEGO;PL. GRUNWALDZKI;DWORZEC GŁÓWNY;Kowale (Stacja kolejowa);KRZYKI".split(";")
-    start_time = "05:12:00"
-    criterion = 't'
 
     start_time = parse_time(start_time)
 
-    distance_matrix = compute_distance_matrix(graph, stops, locations, start_time, criterion)
+    # distance_matrix = compute_distance_matrix(graph, stops, locations, start_time, criterion)
+
+    # start_time_measure = time.time()
+    # best_route, best_cost, best_timings =
+    # local_search(graph, stops, [start] + locations + [start], start_time)
+    # end_time_measure = time.time()
+    #
+    # for i in range(len(best_route)):
+    #     print(f"{best_timings[i]} {best_route[i]}")
+    # print("Total cost:", format_duration(best_cost))
+    # print(f"\nExecution time: {end_time_measure - start_time_measure:.4f} s", file=sys.stderr)
 
     start_time_measure = time.time()
-    best_route, best_cost = local_search(graph, stops, locations + [locations[0]], start_time, distance_matrix)
+    best_route, best_cost, best_timings, best_path = tabu_search(graph, stops, [start] + locations + [start], start_time)
     end_time_measure = time.time()
-    print("Best route (Local Search):", " -> ".join(best_route))
-    print("Total cost:", format_duration(best_cost))
+
+    for i in range(len(best_route)):
+        print(f"{best_timings[i]} {best_route[i]}")
+    print("Total cost:", format_duration(best_cost) if criterion == 't' else best_cost)
+
+    print("\nWhole route:")
+    for j in range(len(best_path)):
+        print(f"Line: {best_path[j][0]} Stop: {best_path[j][1]} Time: {best_path[j][2]}")
+
     print(f"\nExecution time: {end_time_measure - start_time_measure:.4f} s", file=sys.stderr)
 
-    start_time_measure = time.time()
-    best_route, best_cost = tabu_search(graph, stops, locations + [locations[0]], start_time, distance_matrix)
-    end_time_measure = time.time()
-    print("Best route (Tabu Search):", " -> ".join(best_route))
-    print("Total cost:", format_duration(best_cost))
-    print(f"\nExecution time: {end_time_measure - start_time_measure:.4f} s", file=sys.stderr)
-
-# Execution time: 90.4451 s
-# Best route (Local Search): OSIEDLE SOBIESKIEGO -> KRZYKI -> DWORZEC GŁÓWNY -> PL. GRUNWALDZKI -> Kowale (Stacja kolejowa) -> OSIEDLE SOBIESKIEGO
-# Total cost: 2 h 5 min
-#
-# Execution time: 455.3244 s
-# Tabu Search: Terminated because of stagnation.
-# Best route (Tabu Search): OSIEDLE SOBIESKIEGO -> Kowale (Stacja kolejowa) -> DWORZEC GŁÓWNY -> KRZYKI -> PL. GRUNWALDZKI -> OSIEDLE SOBIESKIEGO
-# Total cost: 1 h 51 min
+# OSIEDLE SOBIESKIEGO
+# KRZYKI;Kowale (Stacja kolejowa)
+# 12:00:00
