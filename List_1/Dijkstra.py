@@ -218,5 +218,6 @@ def find_shortest_path(start, end, criterion, start_time, graph, stops):
 if __name__ == "__main__":
     graph, stops = load_graph("Datasource/data.csv")
     # find_shortest_path( "Pola", "Broniewskiego", "t", "02:12:00", graph, stops)
-    find_shortest_path("KRZYKI", "OSIEDLE SOBIESKIEGO", "p", "05:12:00", graph, stops)
-    find_shortest_path("Kowale (Stacja kolejowa)", "Daszyńskiego", "p", "13:48:00", graph, stops)
+    # find_shortest_path("KRZYKI", "OSIEDLE SOBIESKIEGO", "p", "05:12:00", graph, stops)
+    # find_shortest_path("Kowale (Stacja kolejowa)", "Daszyńskiego", "p", "13:48:00", graph, stops)
+    find_shortest_path("Zajezdnia Obornicka", "PORT LOTNICZY", "p", "20:50:00", graph, stops)

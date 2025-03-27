@@ -186,7 +186,7 @@ def compute_distance_matrix(graph, stops, locations, start_time, criterion):
         distance_matrix[i] = {}
         for j in locations:
             if i != j:
-                distance_matrix[i][j], _ = choose_dijkstra(graph, i, j, start_time, 't')
+                distance_matrix[i][j], _ = choose_dijkstra(graph, i, j, start_time, criterion)
     return distance_matrix
 
 
@@ -194,7 +194,7 @@ def local_search(graph, stops, locations, start_time, distance_matrix, max_itera
 
     best_route = locations[:]
     random.shuffle(best_route[1:-1])
-    best_cost = calculate_route_cost(graph, best_route, start_time, distance_matrix)
+    best_cost = calculate_route_cost(graph, best_route, start_time, distance_matrix, criterion)
 
     for _ in range(max_iterations):
         improved = False
@@ -202,7 +202,7 @@ def local_search(graph, stops, locations, start_time, distance_matrix, max_itera
             for j in range(i + 1, len(best_route) - 1):
                 new_route = best_route[:]
                 new_route[i], new_route[j] = new_route[j], new_route[i]
-                new_cost = calculate_route_cost(graph, new_route, start_time, distance_matrix)
+                new_cost = calculate_route_cost(graph, new_route, start_time, distance_matrix, criterion)
 
                 if new_cost < best_cost:
                     best_cost = new_cost
@@ -214,7 +214,7 @@ def local_search(graph, stops, locations, start_time, distance_matrix, max_itera
     return best_route, best_cost
 
 
-def tabu_search(graph, stops, locations, start_time, distance_matrix, max_iterations=100, tabu_size=10, stagnation_limit=1000):
+def tabu_search(graph, stops, locations, start_time, distance_matrix, max_iterations=100, tabu_size=10, stagnation_limit=10):
 
     best_route = locations[:]
 
@@ -222,7 +222,7 @@ def tabu_search(graph, stops, locations, start_time, distance_matrix, max_iterat
         best_route.append(best_route[0])
 
     random.shuffle(best_route[1:-1])
-    best_cost = calculate_route_cost(graph, best_route, start_time, distance_matrix)
+    best_cost = calculate_route_cost(graph, best_route, start_time, distance_matrix, criterion)
 
     tabu_list = []
     best_solution = best_route[:]
@@ -237,7 +237,7 @@ def tabu_search(graph, stops, locations, start_time, distance_matrix, max_iterat
             for j in range(i + 1, len(best_route) - 1):
                 candidate = best_route[:]
                 candidate[i], candidate[j] = candidate[j], candidate[i]
-                candidate_cost = calculate_route_cost(graph, candidate, start_time, distance_matrix)
+                candidate_cost = calculate_route_cost(graph, candidate, start_time, distance_matrix, criterion)
 
                 move = (candidate[i], candidate[j])
 
@@ -273,7 +273,7 @@ def tabu_search(graph, stops, locations, start_time, distance_matrix, max_iterat
     return best_solution, best_solution_cost
 
 
-def calculate_route_cost(graph, route, start_time, distance_matrix):
+def calculate_route_cost(graph, route, start_time, distance_matrix, criterion):
     # print("Location_index_map:", location_index_map)
     # print("Route:", route)
 
@@ -281,7 +281,8 @@ def calculate_route_cost(graph, route, start_time, distance_matrix):
     current_time = start_time
     for i in range(len(route) - 1):
 
-        travel_time = distance_matrix[route[i]][route[i+1]]
+        # travel_time = distance_matrix[route[i]][route[i+1]]
+        travel_time, _ = choose_dijkstra(graph, route[i], route[i+1], current_time, criterion)
 
         total_cost += travel_time
         current_time += timedelta(seconds=travel_time)
@@ -312,3 +313,11 @@ if __name__ == "__main__":
     print("Total cost:", format_duration(best_cost))
     print(f"\nExecution time: {end_time_measure - start_time_measure:.4f} s", file=sys.stderr)
 
+# Execution time: 90.4451 s
+# Best route (Local Search): OSIEDLE SOBIESKIEGO -> KRZYKI -> DWORZEC GŁÓWNY -> PL. GRUNWALDZKI -> Kowale (Stacja kolejowa) -> OSIEDLE SOBIESKIEGO
+# Total cost: 2 h 5 min
+#
+# Execution time: 455.3244 s
+# Tabu Search: Terminated because of stagnation.
+# Best route (Tabu Search): OSIEDLE SOBIESKIEGO -> Kowale (Stacja kolejowa) -> DWORZEC GŁÓWNY -> KRZYKI -> PL. GRUNWALDZKI -> OSIEDLE SOBIESKIEGO
+# Total cost: 1 h 51 min
