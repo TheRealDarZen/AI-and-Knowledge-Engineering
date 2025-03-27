@@ -214,7 +214,7 @@ def local_search(graph, stops, locations, start_time, distance_matrix, max_itera
     return best_route, best_cost
 
 
-def tabu_search(graph, stops, locations, start_time, distance_matrix, max_iterations=100, tabu_size=10, stagnation_limit=5):
+def tabu_search(graph, stops, locations, start_time, distance_matrix, max_iterations=100, tabu_size=10, stagnation_limit=1000):
 
     best_route = locations[:]
 
@@ -274,11 +274,15 @@ def tabu_search(graph, stops, locations, start_time, distance_matrix, max_iterat
 
 
 def calculate_route_cost(graph, route, start_time, distance_matrix):
+    # print("Location_index_map:", location_index_map)
+    # print("Route:", route)
+
     total_cost = 0
     current_time = start_time
     for i in range(len(route) - 1):
-        travel_time = distance_matrix[i][i+1] # Need to map station names to their indexes,
-        # to access distance_matrix values
+
+        travel_time = distance_matrix[route[i]][route[i+1]]
+
         total_cost += travel_time
         current_time += timedelta(seconds=travel_time)
     return total_cost
@@ -286,10 +290,12 @@ def calculate_route_cost(graph, route, start_time, distance_matrix):
 
 if __name__ == "__main__":
     graph, stops = load_graph("Datasource/data.csv")
-    locations = "OSIEDLE SOBIESKIEGO;PL. GRUNWALDZKI;DWORZEC GŁÓWNY;Kowale (Stacja kolejowa)".split(";")
+    locations = "OSIEDLE SOBIESKIEGO;PL. GRUNWALDZKI;DWORZEC GŁÓWNY;Kowale (Stacja kolejowa);KRZYKI".split(";")
     start_time = "05:12:00"
-    start_time = parse_time(start_time)
     criterion = 't'
+
+    start_time = parse_time(start_time)
+
     distance_matrix = compute_distance_matrix(graph, stops, locations, start_time, criterion)
 
     start_time_measure = time.time()
