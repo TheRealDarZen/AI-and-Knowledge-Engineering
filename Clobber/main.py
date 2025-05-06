@@ -1,11 +1,13 @@
 from collections import deque
 
 class Position:
-    def __init__(self, n, m, board):
+    def __init__(self, n, m, board, move, score=None):
         self.n = n
         self.m = m
         self.board = board
+        self.move = move
         self.winner = '_'
+        self.score = score
 
     def getBoard(self):
         return self.board
@@ -39,60 +41,34 @@ def generate_starting_position(n, m):
                 row.append('W')
         board.append(row)
 
-    start_pos = Position(n, m, board)
+    start_pos = Position(n, m, board, 'W')
     return start_pos
 
 seen = set()
 
-def generate_next_possible_positions(position, color):
+def generate_next_possible_positions(position):
     global seen
+    color = position.move
+    board = position.getBoard()
     won = True
     result = []
-    board = position.getBoard()
+
     for i in range(position.m):
         for j in range(position.n):
             if board[i][j] != color:
                 continue
-            if i > 0:
-                if board[i - 1][j] != color and board[i - 1][j] != '_':
-                    won = False
-                    temp = [row[:] for row in board]
-                    temp[i - 1][j] = color
-                    temp[i][j] = '_'
-                    key = board_to_tuple(temp)
-                    if key not in seen:
-                        seen.add(key)
-                        result.append(Node(Position(position.n, position.m, temp)))
-            if i < position.n - 1:
-                if board[i + 1][j] != color and board[i + 1][j] != '_':
-                    won = False
-                    temp = [row[:] for row in board]
-                    temp[i + 1][j] = color
-                    temp[i][j] = '_'
-                    key = board_to_tuple(temp)
-                    if key not in seen:
-                        seen.add(key)
-                        result.append(Node(Position(position.n, position.m, temp)))
-            if j > 0:
-                if board[i][j - 1] != color and board[i][j - 1] != '_':
-                    won = False
-                    temp = [row[:] for row in board]
-                    temp[i][j - 1] = color
-                    temp[i][j] = '_'
-                    key = board_to_tuple(temp)
-                    if key not in seen:
-                        seen.add(key)
-                        result.append(Node(Position(position.n, position.m, temp)))
-            if j < position.n - 1:
-                if board[i][j + 1] != color and board[i][j + 1] != '_':
-                    won = False
-                    temp = [row[:] for row in board]
-                    temp[i][j + 1] = color
-                    temp[i][j] = '_'
-                    key = board_to_tuple(temp)
-                    if key not in seen:
-                        seen.add(key)
-                        result.append(Node(Position(position.n, position.m, temp)))
+            for dx, dy in [(-1,0), (1,0), (0,-1), (0,1)]:
+                ni, nj = i + dx, j + dy
+                if 0 <= ni < position.m and 0 <= nj < position.n:
+                    if board[ni][nj] not in ('_', color):
+                        won = False
+                        temp = [row[:] for row in board]
+                        temp[ni][nj] = color
+                        temp[i][j] = '_'
+                        key = board_to_tuple(temp)
+                        if key not in seen:
+                            seen.add(key)
+                            result.append(Node(Position(position.n, position.m, temp, 'W' if color == 'B' else 'B')))
 
     return result, won
 
@@ -103,11 +79,11 @@ def board_to_tuple(board):
 
 def generate_decision_tree(root, depth):
     tree = root
-    return generate_decision_tree_rec(tree, 'W', depth, 1)
+    return generate_decision_tree_rec(tree, 'W', depth, 0)
 
 def generate_decision_tree_rec(curr_node, color, depth, curr_depth):
 
-    children, won = generate_next_possible_positions(curr_node.position, color)
+    children, won = generate_next_possible_positions(curr_node.position)
 
     if len(children) > 0:
         for elem in children:
@@ -118,7 +94,8 @@ def generate_decision_tree_rec(curr_node, color, depth, curr_depth):
     if depth > curr_depth and len(curr_node.children) > 0:
         for elem in curr_node.children:
             generate_decision_tree_rec(elem, 'B' if color == 'W' else 'W', depth, curr_depth + 1)
-
+    else:
+        curr_node.position.score = heuristic_score(curr_node.position)
 
     return curr_node
 
@@ -138,7 +115,10 @@ def print_tree(tree):
         for _ in range(level_size):
             node = queue.popleft()
             node.position.printBoard()
-            print(node.position.winner)
+            print("Winner: ", node.position.winner)
+            print("To move: ", node.position.move)
+            if node.position.score:
+                print("Score: ", node.position.score)
             if node.position.winner == 'B':
                 b += 1
             elif node.position.winner == 'W':
@@ -151,6 +131,74 @@ def print_tree(tree):
     print("W: ", w, " B: ", b)
 
 
+def heuristic_score(position):
+    if position.winner == 'W':
+        return 1
+    elif position.winner == 'B':
+        return -1
+    board = position.getBoard()
+    color = position.move
+    opponent = 'B' if color == 'W' else 'W'
+
+    def count_legal_moves(color):
+        moves = 0
+        for i in range(position.m):
+            for j in range(position.n):
+                if board[i][j] != color:
+                    continue
+                for dx, dy in [(-1,0), (1,0), (0,-1), (0,1)]:
+                    ni, nj = i + dx, j + dy
+                    if 0 <= ni < position.m and 0 <= nj < position.n:
+                        if board[ni][nj] == opponent:
+                            moves += 1
+        return moves
+
+    def count_isolated(color):
+        isolated = 0
+        for i in range(position.m):
+            for j in range(position.n):
+                if board[i][j] != color:
+                    continue
+                neighbors = 0
+                for dx, dy in [(-1,0), (1,0), (0,-1), (0,1)]:
+                    ni, nj = i + dx, j + dy
+                    if 0 <= ni < position.m and 0 <= nj < position.n:
+                        if board[ni][nj] != '_':
+                            neighbors += 1
+                if neighbors == 0:
+                    isolated += 1
+        return isolated
+
+    mobility_score = count_legal_moves(color) - count_legal_moves(opponent)
+    isolation_score = count_isolated(opponent) - count_isolated(color)
+
+    return (3 * mobility_score + isolation_score) / 100
+
+
+def minimax(node, is_maximizing):
+
+    if node.position.winner == 'W':
+        return 1  # White wins
+    elif node.position.winner == 'B':
+        return -1  # Black wins
+    elif not node.children:
+        return heuristic_score(node.position)
+
+    if is_maximizing:
+        best_score = float('-inf')
+        for child in node.children:
+            score = minimax(child, False)
+            best_score = max(best_score, score)
+        return best_score
+    else:
+        best_score = float('inf')
+        for child in node.children:
+            score = minimax(child, True)
+            best_score = min(best_score, score)
+        return best_score
+
+
+
 if __name__ == "__main__":
     n = 4 # width
     m = 4 # height
@@ -159,6 +207,6 @@ if __name__ == "__main__":
     # print("Starting position:\n")
     # start_pos.printBoard()
 
-    tree = generate_decision_tree(Node(start_pos), 20)
+    tree = generate_decision_tree(Node(start_pos), 10)
 
     print_tree(tree)
