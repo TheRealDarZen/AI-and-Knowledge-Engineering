@@ -189,7 +189,7 @@ def heuristic_score(position):
                           2.0 * component_score +
                           1.5 * parity_score +
                           1.0 * distance_score
-                  ) / 10.0  # Scale down
+                  ) / 100.0  # Scale down
 
     return final_score
 
@@ -461,7 +461,7 @@ def minimax(node, depth, alpha=float('-inf'), beta=float('inf')):
     elif node.position.winner == 'B':
         return -1  # Black wins
     elif depth == 0 or not node.children:
-        return heuristic_score(node.position)
+        return node.position.score
 
     is_maximizing = node.position.move == 'W'
 
@@ -493,6 +493,6 @@ if __name__ == "__main__":
     # print("Starting position:\n")
     # start_pos.printBoard()
 
-    tree = generate_decision_tree(Node(start_pos), 5, 5)
+    tree = generate_decision_tree(Node(start_pos), 30, 1)
 
     print_tree(tree)
