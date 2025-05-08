@@ -47,7 +47,7 @@ def generate_starting_position(n, m):
 
 seen = set()
 
-def generate_next_possible_positions(position, n):
+def generate_next_possible_positions(position):
     global seen
     color = position.move
     board = position.getBoard()
@@ -66,15 +66,15 @@ def generate_next_possible_positions(position, n):
                         temp = [row[:] for row in board]
                         temp[ni][nj] = color
                         temp[i][j] = '_'
-                        key = board_to_tuple(temp)
-                        if key not in seen:
-                            seen.add(key)
-                            result.append(Node(Position(position.n, position.m, temp, 'W' if color == 'B' else 'B')))
-                            if is_winning_position(result[-1].position):
-                                result[-1].position.winner = color
-                            result[-1].position.score = round(heuristic_score(result[-1].position), 3)
 
-    result = top_n_results(result, n)
+                        result.append(Node(Position(position.n, position.m, temp, 'W' if color == 'B' else 'B')))
+
+                        # key = board_to_tuple(temp)
+                        # if key not in seen:
+                        #     seen.add(key)
+                        #     result.append(Node(Position(position.n, position.m, temp, 'W' if color == 'B' else 'B')))
+                        #     if is_winning_position(result[-1].position):
+                        #         result[-1].position.winner = color
 
     return result, won
 
@@ -85,13 +85,12 @@ def board_to_tuple(board):
 def top_n_results(result, n):
     return heapq.nlargest(n, result, key=lambda node: node.position.score)
 
-def generate_decision_tree(root, depth, n):
-    tree = root
-    return generate_decision_tree_rec(tree, 'W', depth, 0, n)
+def generate_decision_tree(root, depth):
+    return generate_decision_tree_rec(root, 'W', depth, 0)
 
-def generate_decision_tree_rec(curr_node, color, depth, curr_depth, n):
+def generate_decision_tree_rec(curr_node, color, depth, curr_depth):
 
-    children, won = generate_next_possible_positions(curr_node.position, n)
+    children, won = generate_next_possible_positions(curr_node.position)
 
     if won:
         curr_node.position.winner = 'B' if color == 'W' else 'W'
@@ -103,7 +102,7 @@ def generate_decision_tree_rec(curr_node, color, depth, curr_depth, n):
         curr_node.add_child(elem)
 
     for elem in curr_node.children:
-        generate_decision_tree_rec(elem, 'B' if color == 'W' else 'W', depth, curr_depth + 1, n)
+        generate_decision_tree_rec(elem, 'B' if color == 'W' else 'W', depth, curr_depth + 1)
 
     return curr_node
 
@@ -123,7 +122,6 @@ def is_winning_position(position):
                     if board[ni][nj] not in ('_', color):
                         return False
     return True
-
 
 
 def print_tree(tree):
@@ -157,7 +155,77 @@ def print_tree(tree):
     print("W: ", w, " B: ", b)
 
 
-def heuristic_score(position):
+def heuristic_score_dumb(position):
+    if position.winner == 'W':
+        return 1
+    elif position.winner == 'B':
+        return -1
+    board = position.getBoard()
+    color = position.move
+    opponent = 'B' if color == 'W' else 'W'
+
+    def count_movable_pieces(color):
+        movable = 0
+        for i in range(position.m):
+            for j in range(position.n):
+                if board[i][j] != color:
+                    continue
+                for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                    ni, nj = i + dx, j + dy
+                    if 0 <= ni < position.m and 0 <= nj < position.n:
+                        if board[ni][nj] == opponent:
+                            movable += 1
+                            break
+        return movable
+
+    return (count_movable_pieces(color) - count_movable_pieces(opponent)) / 100
+
+
+def heuristic_score_simple(position):
+    if position.winner == 'W':
+        return 1
+    elif position.winner == 'B':
+        return -1
+    board = position.getBoard()
+    color = position.move
+    opponent = 'B' if color == 'W' else 'W'
+
+    def count_legal_moves(color):
+        moves = 0
+        for i in range(position.m):
+            for j in range(position.n):
+                if board[i][j] != color:
+                    continue
+                for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                    ni, nj = i + dx, j + dy
+                    if 0 <= ni < position.m and 0 <= nj < position.n:
+                        if board[ni][nj] == opponent:
+                            moves += 1
+        return moves
+
+    def count_isolated(color):
+        isolated = 0
+        for i in range(position.m):
+            for j in range(position.n):
+                if board[i][j] != color:
+                    continue
+                neighbors = 0
+                for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                    ni, nj = i + dx, j + dy
+                    if 0 <= ni < position.m and 0 <= nj < position.n:
+                        if board[ni][nj] != '_':
+                            neighbors += 1
+                if neighbors == 0:
+                    isolated += 1
+        return isolated
+
+    mobility_score = count_legal_moves(color) - count_legal_moves(opponent)
+    isolation_score = count_isolated(opponent) - count_isolated(color)
+
+    return (3 * mobility_score + isolation_score) / 100
+
+
+def heuristic_score_advanced(position):
 
     if position.winner == 'W':
         return 1
@@ -454,14 +522,21 @@ def count_isolated_pieces(position, color):
     return isolated
 
 
-def minimax(node, depth, alpha=float('-inf'), beta=float('inf')):
+def minimax(node, depth, alpha=float('-inf'), beta=float('inf'), strat='a'):
     # Base cases
     if node.position.winner == 'W':
         return 1  # White wins
     elif node.position.winner == 'B':
         return -1  # Black wins
     elif depth == 0 or not node.children:
-        return node.position.score
+        if strat == 's':
+            return heuristic_score_simple(node.position)
+        elif strat == 'a':
+            return heuristic_score_advanced(node.position)
+        elif strat == 'd':
+            return heuristic_score_dumb(node.position)
+        else:
+            return heuristic_score_simple(node.position)
 
     is_maximizing = node.position.move == 'W'
 
@@ -485,14 +560,62 @@ def minimax(node, depth, alpha=float('-inf'), beta=float('inf')):
         return best_score
 
 
+def choose_best_move(root, depth):
+    best_score = float('-inf') if root.position.move == 'W' else float('inf')
+    best_child = None
+
+    for child in root.children:
+        score = minimax(child, depth - 1)
+        if root.position.move == 'W':
+            if score > best_score:
+                best_score = score
+                best_child = child
+        else:
+            if score < best_score:
+                best_score = score
+                best_child = child
+
+    if len(root.children) == 0:
+        print('No children for ', root.position.printBoard())
+
+    return best_child, best_score
+
+
+def play(node, depth):
+
+    node.position.printBoard()
+    print()
+
+    if is_winning_position(node.position):
+        return 'W' if node.position.move == 'B' else 'B'
+
+    tree = generate_decision_tree(node, depth)
+
+    best_move, _ = choose_best_move(tree, depth)
+
+    return play(best_move, depth)
+
+
 if __name__ == "__main__":
-    n = 5 # width
-    m = 6 # height
+    n = 10 # width
+    m = 10 # height
+    depth = 2
     start_pos = generate_starting_position(n, m)
 
     # print("Starting position:\n")
     # start_pos.printBoard()
 
-    tree = generate_decision_tree(Node(start_pos), 30, 1)
+    # tree = generate_decision_tree(Node(start_pos), depth, 2)
+    #
+    # print_tree(tree)
+    #
+    # best_move, best_score = choose_best_move(tree, depth)
+    # print(f"Best move for {start_pos.move}:")
+    # if best_move:
+    #     best_move.position.printBoard()
 
-    print_tree(tree)
+    print("Winner: ", play(Node(start_pos), depth))
+
+
+
+
