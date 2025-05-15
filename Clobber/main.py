@@ -47,7 +47,7 @@ def generate_starting_position(n, m):
 
 seen = set()
 
-def generate_next_possible_positions(position):
+def generate_next_possible_positions(position, k=3):
     global seen
     color = position.move
     board = position.getBoard()
@@ -68,13 +68,16 @@ def generate_next_possible_positions(position):
                         temp[i][j] = '_'
 
                         result.append(Node(Position(position.n, position.m, temp, 'W' if color == 'B' else 'B')))
-
+                        if is_winning_position(result[-1].position):
+                             result[-1].position.winner = color
+                        result[-1].position.score = heuristic_score_advanced(result[-1].position)
                         # key = board_to_tuple(temp)
                         # if key not in seen:
                         #     seen.add(key)
                         #     result.append(Node(Position(position.n, position.m, temp, 'W' if color == 'B' else 'B')))
-                        #     if is_winning_position(result[-1].position):
-                        #         result[-1].position.winner = color
+
+    if len(result) > k:
+        result = top_n_results(result, k, color)
 
     return result, won
 
@@ -82,8 +85,11 @@ def generate_next_possible_positions(position):
 def board_to_tuple(board):
     return tuple(tuple(row) for row in board)
 
-def top_n_results(result, n):
-    return heapq.nlargest(n, result, key=lambda node: node.position.score)
+def top_n_results(result, k, color):
+    if color == 'W':
+        return heapq.nlargest(k, result, key=lambda node: node.position.score)
+    else:
+        return heapq.nsmallest(k, result, key=lambda node: node.position.score)
 
 def generate_decision_tree(root, depth):
     return generate_decision_tree_rec(root, 'W', depth, 0)
@@ -161,8 +167,10 @@ def heuristic_score_dumb(position):
     elif position.winner == 'B':
         return -1
     board = position.getBoard()
-    color = position.move
-    opponent = 'B' if color == 'W' else 'W'
+    # color = position.move
+    # opponent = 'B' if color == 'W' else 'W'
+    color = 'W'
+    opponent = 'B'
 
     def count_movable_pieces(color):
         movable = 0
@@ -187,8 +195,10 @@ def heuristic_score_simple(position):
     elif position.winner == 'B':
         return -1
     board = position.getBoard()
-    color = position.move
-    opponent = 'B' if color == 'W' else 'W'
+    # color = position.move
+    # opponent = 'B' if color == 'W' else 'W'
+    color = 'W'
+    opponent = 'B'
 
     def count_legal_moves(color):
         moves = 0
@@ -233,8 +243,10 @@ def heuristic_score_advanced(position):
         return -1
 
     board = position.getBoard()
-    color = position.move
-    opponent = 'B' if color == 'W' else 'W'
+    # color = position.move
+    # opponent = 'B' if color == 'W' else 'W'
+    color = 'W'
+    opponent = 'B'
 
     # Mobility Score
     player_moves = count_legal_moves(position, color)
@@ -257,13 +269,13 @@ def heuristic_score_advanced(position):
                           2.0 * component_score +
                           1.5 * parity_score +
                           1.0 * distance_score
-                  ) / 100.0  # Scale down
+                  ) / 100.0
 
     return final_score
 
 
 def count_legal_moves(position, color):
-    """Count the number of legal moves available to a player."""
+
     board = position.getBoard()
     opponent = 'B' if color == 'W' else 'W'
     moves = 0
@@ -282,10 +294,7 @@ def count_legal_moves(position, color):
 
 
 def identify_components(position):
-    """
-    Identify separate components (disconnected groups of pieces) on the board.
-    Returns a list of components, where each component is a list of positions.
-    """
+
     board = position.getBoard()
     visited = [[False for _ in range(position.n)] for _ in range(position.m)]
     components = []
@@ -597,9 +606,9 @@ def play(node, depth):
 
 
 if __name__ == "__main__":
-    n = 10 # width
-    m = 10 # height
-    depth = 2
+    n = 4 # width
+    m = 5 # height
+    depth = 5
     start_pos = generate_starting_position(n, m)
 
     # print("Starting position:\n")
