@@ -1,5 +1,6 @@
 import heapq
 from collections import deque
+import time
 
 class Position:
     def __init__(self, n, m, board, move, score=None):
@@ -47,7 +48,7 @@ def generate_starting_position(n, m):
 
 seen = set()
 
-def generate_next_possible_positions(position, k=3):
+def generate_next_possible_positions(position, k=10):
     global seen
     color = position.move
     board = position.getBoard()
@@ -70,7 +71,7 @@ def generate_next_possible_positions(position, k=3):
                         result.append(Node(Position(position.n, position.m, temp, 'W' if color == 'B' else 'B')))
                         if is_winning_position(result[-1].position):
                              result[-1].position.winner = color
-                        result[-1].position.score = heuristic_score_advanced(result[-1].position)
+                        result[-1].position.score = heuristic_score_simple(result[-1].position)
                         # key = board_to_tuple(temp)
                         # if key not in seen:
                         #     seen.add(key)
@@ -531,7 +532,7 @@ def count_isolated_pieces(position, color):
     return isolated
 
 
-def minimax(node, depth, alpha=float('-inf'), beta=float('inf'), strat='a'):
+def minimax(node, depth, alpha=float('-inf'), beta=float('inf'), strat='s'):
     # Base cases
     if node.position.winner == 'W':
         return 1  # White wins
@@ -552,7 +553,7 @@ def minimax(node, depth, alpha=float('-inf'), beta=float('inf'), strat='a'):
     if is_maximizing:
         best_score = float('-inf')
         for child in node.children:
-            score = minimax(child, depth - 1, alpha, beta)
+            score = minimax(child, depth - 1, alpha, beta, strat)
             best_score = max(best_score, score)
             alpha = max(alpha, best_score)
             if beta <= alpha:
@@ -561,7 +562,7 @@ def minimax(node, depth, alpha=float('-inf'), beta=float('inf'), strat='a'):
     else:
         best_score = float('inf')
         for child in node.children:
-            score = minimax(child, depth - 1, alpha, beta)
+            score = minimax(child, depth - 1, alpha, beta, strat)
             best_score = min(best_score, score)
             beta = min(beta, best_score)
             if beta <= alpha:
@@ -569,20 +570,31 @@ def minimax(node, depth, alpha=float('-inf'), beta=float('inf'), strat='a'):
         return best_score
 
 
-def choose_best_move(root, depth):
+def choose_best_move(root, depth, strat='s'):
     best_score = float('-inf') if root.position.move == 'W' else float('inf')
     best_child = None
 
+    alpha = float('-inf')
+    beta = float('inf')
+
     for child in root.children:
-        score = minimax(child, depth - 1)
+        score = minimax(child, depth - 1, alpha, beta, strat)
+
         if root.position.move == 'W':
             if score > best_score:
                 best_score = score
                 best_child = child
+
+            alpha = max(alpha, best_score)
         else:
             if score < best_score:
                 best_score = score
                 best_child = child
+
+            beta = min(beta, best_score)
+
+        if beta <= alpha:
+            break
 
     if len(root.children) == 0:
         print('No children for ', root.position.printBoard())
@@ -590,8 +602,7 @@ def choose_best_move(root, depth):
     return best_child, best_score
 
 
-def play(node, depth):
-
+def play(node, depth, strat='a'):
     node.position.printBoard()
     print()
 
@@ -600,14 +611,129 @@ def play(node, depth):
 
     tree = generate_decision_tree(node, depth)
 
-    best_move, _ = choose_best_move(tree, depth)
+    best_move, _ = choose_best_move(tree, depth, strat)
 
-    return play(best_move, depth)
+    return play(best_move, depth, strat)
+
+
+def minimax_with_tree_generation(position, depth, alpha=float('-inf'), beta=float('inf'),
+                                 isRoot=False, strat='s', k=3):
+
+    if position.winner == 'W':
+        return None, 1 if isRoot else 1  # White wins
+    elif position.winner == 'B':
+        return None, -1 if isRoot else -1  # Black wins
+    elif depth == 0:
+        if strat == 's':
+            score = heuristic_score_simple(position)
+        elif strat == 'a':
+            score = heuristic_score_advanced(position)
+        elif strat == 'd':
+            score = heuristic_score_dumb(position)
+        else:
+            score = heuristic_score_simple(position)
+        return None, score if isRoot else score
+
+    color = position.move
+    is_maximizing = (color == 'W')
+
+    next_positions, won = generate_next_possible_positions_optimized(position, k, strat)
+
+    if won:
+        position.winner = 'B' if color == 'W' else 'W'
+        return None, 1 if color == 'W' else -1
+
+    if not next_positions:
+        return None, -1 if color == 'W' else 1
+
+    best_move = None
+
+    if is_maximizing:
+        best_score = float('-inf')
+        for next_pos in next_positions:
+            _, score = minimax_with_tree_generation(next_pos.position, depth - 1, alpha, beta, False, strat, k)
+            if score > best_score:
+                best_score = score
+                best_move = next_pos
+            alpha = max(alpha, best_score)
+            if beta <= alpha:
+                break
+        return best_move, best_score if isRoot else best_score
+    else:
+        best_score = float('inf')
+        for next_pos in next_positions:
+            _, score = minimax_with_tree_generation(next_pos.position, depth - 1, alpha, beta, False, strat, k)
+            if score < best_score:
+                best_score = score
+                best_move = next_pos
+            beta = min(beta, best_score)
+            if beta <= alpha:
+                break
+        return best_move, best_score if isRoot else best_score
+
+
+def generate_next_possible_positions_optimized(position, k=3, strat='s'):
+
+    color = position.move
+    board = position.getBoard()
+    won = True
+    result = []
+
+    for i in range(position.m):
+        for j in range(position.n):
+            if board[i][j] != color:
+                continue
+            for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                ni, nj = i + dx, j + dy
+                if 0 <= ni < position.m and 0 <= nj < position.n:
+                    if board[ni][nj] not in ('_', color):
+                        won = False
+                        temp = [row[:] for row in board]
+                        temp[ni][nj] = color
+                        temp[i][j] = '_'
+
+                        new_position = Position(position.n, position.m, temp, 'W' if color == 'B' else 'B')
+                        if is_winning_position(new_position):
+                            new_position.winner = color
+
+                        if strat == 's':
+                            new_position.score = heuristic_score_simple(new_position)
+                        elif strat == 'a':
+                            new_position.score = heuristic_score_advanced(new_position)
+                        elif strat == 'd':
+                            new_position.score = heuristic_score_dumb(new_position)
+                        else:
+                            new_position.score = heuristic_score_simple(new_position)
+                        result.append(Node(new_position))
+
+    if len(result) > k:
+        result = top_n_results(result, k, color)
+
+    return result, won
+
+
+def play_optimized(position, depth, strat='a', k=7):
+
+    position.printBoard()
+    print()
+
+    if is_winning_position(position):
+        return 'W' if position.move == 'B' else 'B'
+
+    best_move, _ = minimax_with_tree_generation(position, depth,
+                                                float('-inf'), float('inf'),
+                                                True, strat, k)
+
+    if best_move is None:
+        print("Brak możliwych ruchów!")
+        return 'W' if position.move == 'B' else 'B'
+
+    return play_optimized(best_move.position, depth, strat, k)
 
 
 if __name__ == "__main__":
-    n = 4 # width
-    m = 5 # height
+    n = 10 # width
+    m = 10 # height
     depth = 5
     start_pos = generate_starting_position(n, m)
 
@@ -623,8 +749,13 @@ if __name__ == "__main__":
     # if best_move:
     #     best_move.position.printBoard()
 
-    print("Winner: ", play(Node(start_pos), depth))
-
-
+    start_time_1 = time.time()
+    # print("Winner non-optimized: ", play(Node(start_pos), depth))
+    end_time_1 = time.time()
+    start_time_2 = time.time()
+    print("Winner optimized: ", play_optimized(start_pos, depth))
+    end_time_2 = time.time()
+    print(f"Execution time (non-optimized): {end_time_1 - start_time_1:.2f}s")
+    print(f"Execution time (optimized): {end_time_2 - start_time_2:.2f}s")
 
 
